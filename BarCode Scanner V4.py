@@ -41,6 +41,7 @@ class BarCode_Scanner():
 
                     break
 
+
             cv2.imshow('Barcode Scanner', frame)
 
             if cv2.waitKey(1) == 27:  
@@ -67,8 +68,8 @@ class BarCode_Scanner():
                 nurtional_value = data["products"][0]["nutrition_facts"]
                 print("Nurtional Contents: ", nurtional_value,"\n")
 
-                ingredents = data["products"][0]["ingredients"]
-                print("ingredents Contents: ", ingredents,"\n")
+                self.ingredents = data["products"][0]["ingredients"]
+                print("ingredents Contents: ", self.ingredents,"\n")
                 if isinstance(nurtional_value,dict):
                     for key,value in nurtional_value.items():
                         print(f"  {key}: {value}")
@@ -77,9 +78,54 @@ class BarCode_Scanner():
         except Exception as e:
             print("API request failed:", e)
 
-    def halal(self):
-        pass
+        self.halal()
 
+    def halal(self):
+        haram_ingredients = [
+                # Animal-Derived Fats & Emulsifiers
+                "Gelatin",
+                "Lard",
+                "Suet",
+                "Tallow",
+                "Mono- and Diglycerides",
+                "Glycerin",
+                "Stearic Acid",
+                "Calcium Stearate",
+                "Sucrose Esters of Fatty Acids",
+                
+                # Animal-Derived Proteins & Enzymes
+                "Rennet",
+                "Chymosin",
+                "L-Cysteine",
+                "Pancreatin",
+                "Trypsin",
+                "Pepsin",
+                
+                # Colorants & Glazing Agents
+                "Carmine",
+                "Cochineal Extract",
+                "Shellac",
+                "Isinglass",
+                
+                # Alcohols & Fermented Products
+                "Alcohol",
+                "Ethanol",
+                "Wine Vinegar",
+                
+                # Miscellaneous
+                "Vitamin D3",
+                "Refined Sugar (Bone Char Processed)"
+            ]
+        
+        ingredients = self.ingredents.lower()
+        found_haram = False
+        for haram in haram_ingredients:
+            if haram.lower() in ingredients:
+             print(f"THIS ITEM CONTAINS HARAM INGREDIENT: {haram}")
+             print("THIS ITEM IS NOT HALAL")
+            found_haram = True
+        if not found_haram:
+            print("THIS ITEM APPEARS TO BE HALAL")
 
 
 if __name__ == "__main__":
