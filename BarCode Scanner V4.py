@@ -60,6 +60,11 @@ class BarCode_Scanner(QWidget):
         layout.addWidget(self.halal_label)
         self.setLayout(layout)
 
+        self.desc3.setAlignment(Qt.AlignCenter)
+        self.desc3.setAlignment(Qt.AlignCenter)
+        self.desc1.setAlignment(Qt.AlignCenter)
+
+
         # 6) OpenCV camera
         self.cap = cv2.VideoCapture(camera_index)
         if not self.cap.isOpened():
