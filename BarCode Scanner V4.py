@@ -1,134 +1,142 @@
-import cv2
-from pyzbar.pyzbar import decode
 import sys
-import urllib.request
-import pprint
+import cv2
 import json
+import urllib.request
+from pyzbar.pyzbar import decode
+from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout
+from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QImage, QPixmap
 
-class BarCode_Scanner():
-    def __init__(self,Camera_Index = 0):
-        self.cam = cv2.VideoCapture(Camera_Index)
-        if not self.cam.isOpened():
-            print("Error: Could not open camera.")
-            sys.exit(1)
+class BarCode_Scanner(QWidget):
+    def __init__(self, camera_index=0):
+        super().__init__()
+        self.setWindowTitle("Barcode Scanner")
 
-    def run(self):
-        while self.cam.isOpened():
-            suceess,frame = self.cam.read()
-            frame = cv2.flip(frame,1)
-            if not suceess:
-                print("Warning: couldn't grab a frame")
-                break
+        # 1) Title
+        self.Title = QLabel("SCAN PRODUCT BARCODE:", self)
+        self.Title.setAlignment(Qt.AlignCenter)
+        self.Title.setStyleSheet("font-size: 18px; font-weight: bold;")
 
-            barcodes = decode(frame)
+        # 2) Video feed container
+        self.video_label = QLabel(self)
+        self.video_label.setAlignment(Qt.AlignCenter)
 
-            if not barcodes:
-                pass
-            else:
-                for barcode in barcodes:
-                    raw_text = barcode.data.decode('utf-8', errors='replace')
-                    print(f"Raw data: {raw_text}")
+        # 3) Info labels
+        self.desc1 = QLabel("", self)
+        self.desc2 = QLabel("", self)
+        self.desc3 = QLabel("", self)
+        self.halal_label = QLabel("", self)
+        self.halal_label.setWordWrap(True)
+        self.halal_label.setAlignment(Qt.AlignCenter)
+        self.halal_label.setStyleSheet("font-size: 16px; font-weight: bold;")
 
-                    # try to parse it as JSON
-                    try:
-                        obj = json.loads(raw_text)
-                        print("Parsed JSON:", obj)
-                    except json.JSONDecodeError:
-                        print("→ Data is not valid JSON")
+        # 4) Layout
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.Title)
+        layout.addWidget(self.video_label)
+        layout.addWidget(self.desc1)
+        layout.addWidget(self.desc2)
+        layout.addWidget(self.desc3)
+        layout.addWidget(self.halal_label)
+        self.setLayout(layout)
 
-                    # Call the API search with the barcode value
-                    self.search_api(raw_text)
+        self.desc1.setAlignment(Qt.AlignCenter)
+        self.desc2.setAlignment(Qt.AlignCenter)
+        self.desc3.setAlignment(Qt.AlignCenter)
+        self.halal_label.setAlignment(Qt.AlignCenter)
 
-                    break
+        # 5) OpenCV camera
+        self.cap = cv2.VideoCapture(camera_index)
+        if not self.cap.isOpened():
+            raise RuntimeError("Could not open camera.")
 
+        # 6) Timer for updating frames
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update_frame)
+        self.timer.start(30)  # ~33 FPS
 
-            cv2.imshow('Barcode Scanner', frame)
+        # avoid hammering API with same code repeatedly
+        self.last_barcode = None
 
-            if cv2.waitKey(1) == 27:  
-                break
+    def update_frame(self):
+        ret, frame = self.cap.read()
+        if not ret:
+            return
 
-        # clean up
-        self.cam.release()
-        cv2.destroyAllWindows()
+        frame = cv2.flip(frame, 1)
+
+        # decode barcodes
+        barcodes = decode(frame)
+        if barcodes:
+            raw = barcodes[0].data.decode('utf-8', errors='replace')
+            if raw != self.last_barcode:
+                self.last_barcode = raw
+                self.search_api(raw)
+
+        # show frame in Qt
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb.shape
+        bytes_per_line = ch * w
+        qt_img = QImage(rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        self.video_label.setPixmap(QPixmap.fromImage(qt_img))
 
     def search_api(self, barcode_value):
         api_key = "0679hdynayu05li2yowaxjz9alhhpv"
-        url = f"https://api.barcodelookup.com/v3/products?barcode={barcode_value}&formatted=y&key={api_key}"
-
+        url = (
+            f"https://api.barcodelookup.com/v3/products"
+            f"?barcode={barcode_value}&formatted=y&key={api_key}"
+        )
         try:
-            with urllib.request.urlopen(url) as url_response:
-                data = json.loads(url_response.read().decode())
+            with urllib.request.urlopen(url) as resp:
+                data = json.loads(resp.read().decode())
+            product = data["products"][0]
 
-                barcode = data["products"][0]["barcode_number"]
-                print("Barcode Number: ", barcode, "\n")
+            name = product.get("title", "Unknown")
+            nutrition = product.get("nutrition_facts", "N/A")
+            self.ingredients = product.get("ingredients", "")
 
-                name = data["products"][0]["title"]
-                print("Title: ", name, "\n")
+            self.desc1.setText(f"Product: {name}")
+            self.desc2.setText(f"Nutrition: {nutrition}")
+            self.desc3.setText(f"Ingredients: {self.ingredients}")
+            print(f"Scanned: {name}")
 
-                nurtional_value = data["products"][0]["nutrition_facts"]
-                print("Nurtional Contents: ", nurtional_value,"\n")
-
-                self.ingredents = data["products"][0]["ingredients"]
-                print("ingredents Contents: ", self.ingredents,"\n")
-                if isinstance(nurtional_value,dict):
-                    for key,value in nurtional_value.items():
-                        print(f"  {key}: {value}")
-                else:
-                    print(nurtional_value)
         except Exception as e:
             print("API request failed:", e)
+            self.desc1.setText("API Error")
+            self.desc2.clear()
+            self.desc3.clear()
+            self.halal_label.clear()
+            return
 
-        self.halal()
+        self.check_halal()
 
-    def halal(self):
-        haram_ingredients = [
-                # Animal-Derived Fats & Emulsifiers
-                "Gelatin",
-                "Lard",
-                "Suet",
-                "Tallow",
-                "Mono- and Diglycerides",
-                "Glycerin",
-                "Stearic Acid",
-                "Calcium Stearate",
-                "Sucrose Esters of Fatty Acids",
-                
-                # Animal-Derived Proteins & Enzymes
-                "Rennet",
-                "Chymosin",
-                "L-Cysteine",
-                "Pancreatin",
-                "Trypsin",
-                "Pepsin",
-                
-                # Colorants & Glazing Agents
-                "Carmine",
-                "Cochineal Extract",
-                "Shellac",
-                "Isinglass",
-                
-                # Alcohols & Fermented Products
-                "Alcohol",
-                "Ethanol",
-                "Wine Vinegar",
-                
-                # Miscellaneous
-                "Vitamin D3",
-                "Refined Sugar (Bone Char Processed)"
-            ]
-        
-        ingredients = self.ingredents.lower()
-        found_haram = False
-        for haram in haram_ingredients:
-            if haram.lower() in ingredients:
-             print(f"THIS ITEM CONTAINS HARAM INGREDIENT: {haram}")
-             print("THIS ITEM IS NOT HALAL")
-            found_haram = True
-        if not found_haram:
-            print("THIS ITEM APPEARS TO BE HALAL")
+    def check_halal(self):
+        haram_list = [
+            "gelatin","lard","suet","tallow","mono- and diglycerides",
+            "glycerin","stearic acid","calcium stearate",
+            "sucrose esters of fatty acids","rennet","chymosin",
+            "l-cysteine","pancreatin","trypsin","pepsin",
+            "carmine","cochineal extract","shellac","isinglass",
+            "alcohol","ethanol","wine vinegar",
+            "vitamin d3","bone char"
+        ]
+        text = self.ingredients.lower()
+        found = any(item in text for item in haram_list)
 
+        if found:
+            self.halal_label.setText("NOT HALAL\nX")
+            print("Product is NOT HALAL")
+        else:
+            self.halal_label.setText("✅ HALAL")
+            print("Product is HALAL")
+
+    def closeEvent(self, event):
+        self.cap.release()
+        super().closeEvent(event)
 
 if __name__ == "__main__":
-    scanner = BarCode_Scanner()
-    scanner.run()
-    
+    app = QApplication(sys.argv)
+    window = BarCode_Scanner()
+    window.resize(800, 600)
+    window.show()
+    sys.exit(app.exec_())
