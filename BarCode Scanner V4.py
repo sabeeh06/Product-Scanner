@@ -98,7 +98,7 @@ class BarCode_Scanner(QWidget):
         self.video_label.setPixmap(QPixmap.fromImage(qt_img))
 
     def search_api(self, barcode_value):
-        api_key = "0679hdynayu05li2yowaxjz9alhhpv"
+        api_key = "5b64qhm53xyxqmqm7xbx9hjqm2umhu"
         url = (
             f"https://api.barcodelookup.com/v3/products"
             f"?barcode={barcode_value}&formatted=y&key={api_key}"
