@@ -3,7 +3,9 @@ import cv2
 import json
 import urllib.request
 from pyzbar.pyzbar import decode
-from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout
+from PyQt5.QtWidgets import (
+    QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QSizePolicy
+)
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QImage, QPixmap
 
@@ -24,12 +26,21 @@ class BarCode_Scanner(QWidget):
         # 3) Product image
         self.image_label = QLabel(self)
         self.image_label.setAlignment(Qt.AlignCenter)
-        self.image_label.setFixedSize(200, 200)  # Reserve space
+        self.image_label.setFixedSize(200, 200)
 
         # 4) Info labels
         self.desc1 = QLabel("", self)
+
         self.desc2 = QLabel("", self)
+        self.desc2.setWordWrap(True)
+        self.desc2.setMaximumWidth(400)
+        self.desc2.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+
         self.desc3 = QLabel("", self)
+        self.desc3.setWordWrap(True)
+        self.desc3.setMaximumWidth(400)
+        self.desc3.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+
         self.halal_label = QLabel("", self)
         self.halal_label.setWordWrap(True)
         self.halal_label.setAlignment(Qt.AlignCenter)
@@ -42,8 +53,8 @@ class BarCode_Scanner(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(self.Title)
         layout.addLayout(top_row)
-        layout.addWidget(self.image_label, 1)
         layout.addWidget(self.desc1)
+        layout.addWidget(self.image_label, 1)
         layout.addWidget(self.desc2)
         layout.addWidget(self.desc3)
         layout.addWidget(self.halal_label)
@@ -59,6 +70,7 @@ class BarCode_Scanner(QWidget):
         self.timer.timeout.connect(self.update_frame)
         self.timer.start(30)  # ~33 FPS
 
+        # avoid repeated API calls on the same barcode
         self.last_barcode = None
 
     def update_frame(self):
@@ -99,12 +111,13 @@ class BarCode_Scanner(QWidget):
                     raw_data = urllib.request.urlopen(img_url).read()
                     pix = QPixmap()
                     pix.loadFromData(raw_data)
-                    # scale to fit
-                    self.image_label.setPixmap(pix.scaled(
-                        self.image_label.size(),
-                        Qt.KeepAspectRatio,
-                        Qt.SmoothTransformation
-                    ))
+                    self.image_label.setPixmap(
+                        pix.scaled(
+                            self.image_label.size(),
+                            Qt.KeepAspectRatio,
+                            Qt.SmoothTransformation
+                        )
+                    )
                 except Exception:
                     self.image_label.clear()
             else:
